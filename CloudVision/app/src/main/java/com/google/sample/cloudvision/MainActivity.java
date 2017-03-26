@@ -37,6 +37,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.HttpTransport;
@@ -58,6 +60,15 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.simple.JSONArray;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
+import org.scribe.builder.ServiceBuilder;
+import org.scribe.model.OAuthRequest;
+import org.scribe.model.Response;
+import org.scribe.model.Token;
+import org.scribe.model.Verb;
+import org.scribe.oauth.OAuthService;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -320,101 +331,155 @@ public class MainActivity extends AppCompatActivity {
                     BatchAnnotateImagesResponse response = annotateRequest.execute();
                     //String[] results = new String[2];
                     String results[] = convertResponseToString(response);
-                    String jsonStr = getCharityDetails("http://data.orghunter.com/v1/charityfinancial?user_key=", "aee97b7199868d90a4b9b01b77a59e9a", "ein=590774235");
+
+                    StringBuilder sb = new StringBuilder();
+                    StringBuilder sb2 = new StringBuilder();
+                    StringBuilder sb3 = new StringBuilder();
+                    sb2.append("Other Charity Names Found: ");
+
+                    sb.append("Name: ").append(results[1]).append("\n");
+                    sb.append("Search Score: ").append(results[0]).append("\n");
 
                     float avgRating = 0;
-                    if (jsonStr != null) {
+                    int count = 3;
+                    String ein = null;
+                    String einResponse = getCharityDetails("http://data.orghunter.com/v1/charitysearch?user_key=", "aee97b7199868d90a4b9b01b77a59e9a", "searchTerm=" + results[1].replace(" ", "%20"));
+                    if (einResponse != null) {
                         try {
-                            JSONObject c = new JSONObject(jsonStr).getJSONObject("data");
+                            org.json.JSONArray eArr = new JSONObject(einResponse).getJSONArray("data");
+                            int eCount = eArr.length();
+                            sb.append("Results Found: ").append(eCount).append("\n");
+                            for (int x = 0; x < eArr.length(); x++) {
+                                JSONObject e = eArr.getJSONObject(x);
+                                ein = e.getString("ein");
+                                sb2.append(e.getString("charityName")).append(", ");
+                                Log.i("EIN:", ein);
 
-                            String city = c.getString("city");
-                            Log.i("City:", city);
-                            String state = c.getString("state");
-                            Log.i("State:", state);
-                            String country = c.getString("country");
-                            Log.i("Country:", country);
-                            String deductability = c.getString("deductibility");
-                            Log.i("Deductability:", deductability);
-                            String desc = c.getString("foundation");
-                            Log.i("Desc:", desc);
-                            String office_expenses = c.getString("officexpns");
-                            Log.i("Office Expenses:", office_expenses);
-                            String total_func_expenses = c.getString("totfuncexpns");
-                            Log.i("Total FN Expenses:", total_func_expenses);
-                            String total_assets = c.getString("totassetsend");
-                            Log.i("Total Assets:", total_assets);
-                            String total_liabilities = c.getString("totliabend");
-                            Log.i("Total Liabilities:", total_liabilities);
-                            String total_income = c.getString("incomeAmount");
-                            Log.i("Total Income:", total_income);
+                                String jsonStr = getCharityDetails("http://data.orghunter.com/v1/charityfinancial?user_key=", "aee97b7199868d90a4b9b01b77a59e9a", "ein=" + ein);
+                                if (jsonStr != null) {
+                                    try {
+                                        JSONObject c = new JSONObject(jsonStr).getJSONObject("data");
 
-                            int rat1 = 0;
-                            try {
-                                rat1 = 100 * Integer.parseInt(office_expenses) / Integer.parseInt(total_func_expenses);
-                                if (rat1 >= 75) {
-                                    avgRating += 2.0f;
-                                } else if (rat1 >= 50) {
-                                    avgRating += 3.0f;
-                                } else if (rat1 >= 25) {
-                                    avgRating += 4.0f;
-                                } else {
-                                    avgRating += 5.0f;
+                                        String city = c.getString("city");
+                                        Log.i("City:", city);
+                                        String state = c.getString("state");
+                                        Log.i("State:", state);
+                                        String country = c.getString("country");
+                                        Log.i("Country:", country);
+
+                                        sb3.append("Location: ").append(city + ", " + state + ", " + country).append("\n");
+
+                                        String deductability = c.getString("deductibility");
+                                        Log.i("Deductability:", deductability);
+                                        sb3.append("Deductability: ").append(deductability).append("\n");
+
+                                        String desc = c.getString("foundation");
+                                        Log.i("Desc:", desc);
+                                        sb3.append("Description: ").append(desc).append("\n");
+
+                                        String office_expenses = c.getString("officexpns");
+                                        Log.i("Office Expenses:", office_expenses);
+
+                                        String total_func_expenses = c.getString("totfuncexpns");
+                                        Log.i("Total FN Expenses:", total_func_expenses);
+
+                                        String total_assets = c.getString("totassetsend");
+                                        Log.i("Total Assets:", total_assets);
+
+                                        String total_liabilities = c.getString("totliabend");
+                                        Log.i("Total Liabilities:", total_liabilities);
+
+                                        String total_income = c.getString("incomeAmount");
+                                        Log.i("Total Income:", total_income);
+
+                                        if ((null == office_expenses && null == total_func_expenses) || (null == total_assets && null == total_liabilities)) {
+                                            if (eArr.length() != 1 + x)
+                                                continue;
+                                        }
+
+                                        double rat1 = 0;
+                                        try {
+                                            rat1 = 100 * Double.parseDouble(office_expenses) / Double.parseDouble(total_func_expenses);
+                                            if (rat1 >= 75) {
+                                                avgRating += 2.0d;
+                                            } else if (rat1 >= 50) {
+                                                avgRating += 3.0d;
+                                            } else if (rat1 >= 25) {
+                                                avgRating += 4.0d;
+                                            } else {
+                                                avgRating += 5.0d;
+                                            }
+                                        } catch (Exception ex) {
+                                            /* Suppress Exception */
+                                            Log.e("In Catch Block 1!", ex.toString());
+                                            --count;
+                                        }
+
+                                        double rat2 = 0;
+                                        try {
+                                            rat2 = Double.parseDouble(total_liabilities) * 100 / Double.parseDouble(total_assets);
+                                            if (rat2 <= 0) {
+                                                avgRating += 2.0d;
+                                            } else {
+                                                avgRating += 4.0d;
+                                            }
+                                        } catch (Exception ex) {
+                                            /* Suppress Exception */
+                                            Log.e("In Catch Block 2!", ex.toString());
+                                            --count;
+                                        }
+
+                                        double rat3 = 0;
+                                        try {
+                                            rat3 = Double.parseDouble(total_income);
+                                            if (rat3 <= 0) {
+                                                avgRating += 2.0d;
+                                            } else {
+                                                avgRating += 4.0d;
+                                            }
+                                        } catch (Exception ex) {
+                                            /* Suppress Exception */
+                                            Log.e("In Catch Block 3!", ex.toString());
+                                            --count;
+                                        }
+
+                                        avgRating /= count;
+                                        Log.i("1 Rating:", String.valueOf(rat1));
+                                        Log.i("2 Rating:", String.valueOf(rat2));
+                                        Log.i("3 Rating:", String.valueOf(rat3));
+                                        Log.i("Average Rating:", String.valueOf(avgRating));
+
+                                        while (x < eArr.length()) {
+                                            JSONObject exx = eArr.getJSONObject(x);
+                                            sb2.append(exx.getString("charityName")).append(", ");
+                                            ++x;
+                                        }
+
+                                        break;
+                                    } catch (final JSONException exj) {
+                                        Log.e(TAG, "Json parsing error: " + exj.getMessage());
+                                        runOnUiThread(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                Toast.makeText(getApplicationContext(),
+                                                        "Json parsing error: " + exj.getMessage(),
+                                                        Toast.LENGTH_LONG)
+                                                        .show();
+                                            }
+                                        });
+
+                                    }
                                 }
-                            } catch (Exception ex) {
-                                /* Suppress Exception */
-                                avgRating += 3.0f;
                             }
-
-                            int rat2 = 0;
-                            try {
-                                rat2 = Integer.parseInt(total_liabilities) * 100 / Integer.parseInt(total_assets);
-                                if (rat2 < 0) {
-                                    avgRating += 2.0f;
-                                } else {
-                                    avgRating += 4.0f;
-                                }
-                            } catch (Exception ex) {
-                                /* Suppress Exception */
-                                avgRating += 3.0f;
-                            }
-
-                            int rat3 = 0;
-                            try {
-                                rat3 = Integer.parseInt(total_income);
-                                if (rat3 < 0) {
-                                    avgRating += 2.0f;
-                                } else {
-                                    avgRating += 4.0f;
-                                }
-                            } catch (Exception ex) {
-                                /* Suppress Exception */
-                                avgRating += 3.0f;
-                            }
-
-                            avgRating /= 3.0f;
-                            Log.i("1 Rating:", String.valueOf(rat1));
-                            Log.i("2 Rating:", String.valueOf(rat2));
-                            Log.i("3 Rating:", String.valueOf(rat3));
-                            Log.i("Average Rating:", String.valueOf(avgRating));
-                        } catch (final JSONException e) {
-                            Log.e(TAG, "Json parsing error: " + e.getMessage());
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    Toast.makeText(getApplicationContext(),
-                                            "Json parsing error: " + e.getMessage(),
-                                            Toast.LENGTH_LONG)
-                                            .show();
-                                }
-                            });
-
+                        } catch (Exception ex) {
+                            Log.e("EIN Not Found!", ex.toString());
                         }
                     }
 
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("Name: ").append(results[1]).append("\n");
-                    sb.append("Search Score: ").append(results[0]).append("\n");
-                    sb.append("Rating: ").append(avgRating).append(" / 5.0");
+                    sb.append("Rating: ").append(String.format("%.2f", avgRating)).append(" / 5.0").append("\n");
+                    sb.append(sb3.toString());
+                    String otherCharities = sb2.toString();
+                    sb.append(otherCharities.substring(0, otherCharities.length() - 2));
                     return sb.toString();
                 } catch (GoogleJsonResponseException e) {
                     Log.d(TAG, "failed to make API request because " + e.getContent());
@@ -434,7 +499,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public Bitmap scaleBitmapDown(Bitmap bitmap, int maxDimension) {
-
         int originalWidth = bitmap.getWidth();
         int originalHeight = bitmap.getHeight();
         int resizedWidth = maxDimension;
@@ -468,5 +532,143 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return results;
+    }
+
+
+    private static final String API_HOST = "api.yelp.com";
+    private static final String DEFAULT_TERM = "dinner";
+    private static final String DEFAULT_LOCATION = "San Francisco, CA";
+    private static final int SEARCH_LIMIT = 3;
+    private static final String SEARCH_PATH = "/v2/search";
+    private static final String BUSINESS_PATH = "/v2/business";
+
+    /*
+     * Update OAuth credentials below from the Yelp Developers API site:
+     * http://www.yelp.com/developers/getting_started/api_access
+     */
+    private static final String CONSUMER_KEY = "";
+    private static final String CONSUMER_SECRET = "";
+    private static final String TOKEN = "";
+    private static final String TOKEN_SECRET = "";
+
+    OAuthService service;
+    Token accessToken;
+
+    /**
+     * Setup the Yelp API OAuth credentials.
+     *
+     * @param consumerKey    Consumer key
+     * @param consumerSecret Consumer secret
+     * @param token          Token
+     * @param tokenSecret    Token secret
+     */
+    public void callYelp(String consumerKey, String consumerSecret, String token, String tokenSecret) throws Exception {
+        YelpAPICLI yelpApiCli = new YelpAPICLI();
+        new JCommander(yelpApiCli, "");
+        this.service =
+                new ServiceBuilder().provider(TwoStepOAuth.class).apiKey(consumerKey)
+                        .apiSecret(consumerSecret).build();
+        this.accessToken = new Token(token, tokenSecret);
+        queryAPI(yelpApiCli);
+    }
+
+    /**
+     * Creates and sends a request to the Search API by term and location.
+     * <p>
+     * See <a href="http://www.yelp.com/developers/documentation/v2/search_api">Yelp Search API V2</a>
+     * for more info.
+     *
+     * @param term     <tt>String</tt> of the search term to be queried
+     * @param location <tt>String</tt> of the location
+     * @return <tt>String</tt> JSON Response
+     */
+    public String searchForBusinessesByLocation(String term, String location) {
+        OAuthRequest request = createOAuthRequest(SEARCH_PATH);
+        request.addQuerystringParameter("term", term);
+        request.addQuerystringParameter("location", location);
+        request.addQuerystringParameter("limit", String.valueOf(SEARCH_LIMIT));
+        return sendRequestAndGetResponse(request);
+    }
+
+    /**
+     * Creates and sends a request to the Business API by business ID.
+     * <p>
+     * See <a href="http://www.yelp.com/developers/documentation/v2/business">Yelp Business API V2</a>
+     * for more info.
+     *
+     * @param businessID <tt>String</tt> business ID of the requested business
+     * @return <tt>String</tt> JSON Response
+     */
+    public String searchByBusinessId(String businessID) {
+        OAuthRequest request = createOAuthRequest(BUSINESS_PATH + "/" + businessID);
+        return sendRequestAndGetResponse(request);
+    }
+
+    /**
+     * Creates and returns an {@link OAuthRequest} based on the API endpoint specified.
+     *
+     * @param path API endpoint to be queried
+     * @return <tt>OAuthRequest</tt>
+     */
+    private OAuthRequest createOAuthRequest(String path) {
+        OAuthRequest request = new OAuthRequest(Verb.GET, "https://" + API_HOST + path);
+        return request;
+    }
+
+    /**
+     * Sends an {@link OAuthRequest} and returns the {@link Response} body.
+     *
+     * @param request {@link OAuthRequest} corresponding to the API request
+     * @return <tt>String</tt> body of API response
+     */
+    private String sendRequestAndGetResponse(OAuthRequest request) {
+        System.out.println("Querying " + request.getCompleteUrl() + " ...");
+        this.service.signRequest(this.accessToken, request);
+        Response response = request.send();
+        return response.getBody();
+    }
+
+    /**
+     * Queries the Search API based on the command line arguments and takes the first result to query
+     * the Business API.
+     *
+     * @param yelpApiCli <tt>YelpAPICLI</tt> command line arguments
+     */
+    private void queryAPI(YelpAPICLI yelpApiCli) throws JSONException {
+        String searchResponseJSON =
+                searchForBusinessesByLocation(yelpApiCli.term, yelpApiCli.location);
+
+        JSONParser parser = new JSONParser();
+        JSONObject response = null;
+        try {
+            response = (JSONObject) parser.parse(searchResponseJSON);
+        } catch (ParseException pe) {
+            System.out.println("Error: could not parse JSON response:");
+            System.out.println(searchResponseJSON);
+            System.exit(1);
+        }
+
+        JSONArray businesses = (JSONArray) response.get("businesses");
+        JSONObject firstBusiness = (JSONObject) businesses.get(0);
+        String firstBusinessID = firstBusiness.get("id").toString();
+        System.out.println(String.format(
+                "%s businesses found, querying business info for the top result \"%s\" ...",
+                businesses.size(), firstBusinessID));
+
+        // Select the first business and display business details
+        String businessResponseJSON = searchByBusinessId(firstBusinessID.toString());
+        System.out.println(String.format("Result for business \"%s\" found:", firstBusinessID));
+        System.out.println(businessResponseJSON);
+    }
+
+    /**
+     * Command-line interface for the sample Yelp API runner.
+     */
+    private static class YelpAPICLI {
+        @Parameter(names = {"-q", "--term"}, description = "Search Query Term")
+        public String term = DEFAULT_TERM;
+
+        @Parameter(names = {"-l", "--location"}, description = "Location to be Queried")
+        public String location = DEFAULT_LOCATION;
     }
 }
